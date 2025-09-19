@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+crawler/backup/*
+crawler/result_data/*
+crawler/debug/report/*
+crawler/process-images/*
+.vs
+.vs/*
+.env
+.git-v1

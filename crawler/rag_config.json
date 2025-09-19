@@ -1,0 +1,11 @@
+{
+    "filtered_content_dir": "crawler/result_data/filtered_content",
+    "rag_output_dir": "crawler/result_data/rag_output",
+    "process_images_dir": "crawler/process-images",
+    "file_pattern": "*.html",
+    "preserve_image_structure": true,
+    "generate_manifests": true,
+    "batch_size": 10,
+    "skip_existing": false,
+    "enable_validation": true
+}

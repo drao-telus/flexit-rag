@@ -1,0 +1,33 @@
+{
+    "[python]": {
+        // Enable formatting on save for Python files
+        "editor.formatOnSave": true,
+        // Set Black as the default formatter
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        // Enable Ruff as the linter
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        },
+        // Disable other linters to avoid conflicts
+        "python.linting.flake8Enabled": false,
+        "python.linting.pylintEnabled": false
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/*.pyc": {
+            "when": "$(basename).py"
+        },
+        "**/__pycache__": true,
+        "**/.venv": true,
+        "**/venv": true,
+        ".vs": true,
+        "*.egg-info": true,
+        "**/.git-v1": true
+    }
+}

@@ -1,0 +1,30 @@
+[project]
+name = "flexit-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright==1.40.0",
+    "beautifulsoup4==4.12.2",
+    "aiofiles==23.2.1",
+    "python-dotenv>=1.0.0",
+    "streamlit>=1.28.0",
+    "requests>=2.31.0",
+    "lxml>=6.0.1",
+    "markdown>=3.8.2",
+    "markdownify>=1.2.0",
+    "rapidfuzz>=3.14.1",
+    "nltk>=3.9.1",
+    "unidecode>=1.4.0",
+    "html2text>=2025.4.15",
+    "scikit-learn>=1.7.2",
+    "textstat>=0.7.10",
+    "tiktoken>=0.11.0",
+    "qdrant-client>=1.15.1",
+    "pylint>=3.3.8",
+    "flake8>=7.3.0",
+    "pycodestyle>=2.14.0",
+    "black>=25.9.0",
+    "ruff>=0.13.1",
+]
