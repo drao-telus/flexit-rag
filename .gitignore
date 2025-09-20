@@ -16,3 +16,7 @@ crawler/process-images/*
 .vs/*
 .env
 .git-v1
+.streamlit/*
+__pycache__/*
+flexit_llm/__pycache__/*
+__pycache__/main.cpython-312.pyc

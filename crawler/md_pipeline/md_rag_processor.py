@@ -3,15 +3,16 @@ MD RAG Processor - Generates RAG documents from markdown content using chunking 
 Handles efficient processing without reading complete long files, recognizing common patterns.
 """
 
-import json
 import hashlib
-from typing import Dict, List, Any, Optional, Tuple
-from pathlib import Path
-from dataclasses import dataclass, asdict
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from .md_chunking_strategy import ChunkingStrategyManager, ChunkingStrategy
-from .topic_extractor import TopicExtractor
+from flexit_llm.utility.topic_extractor import TopicExtractor
+
+from .md_chunking_strategy import ChunkingStrategyManager
 
 
 @dataclass
@@ -484,9 +485,11 @@ def get_file_processing_stats(rag_document: RAGDocument) -> Dict[str, Any]:
         "total_chunks": rag_document.total_chunks,
         "processing_strategy": rag_document.processing_strategy,
         "total_content_length": total_content_length,
-        "average_chunk_size": total_content_length // rag_document.total_chunks
-        if rag_document.total_chunks > 0
-        else 0,
+        "average_chunk_size": (
+            total_content_length // rag_document.total_chunks
+            if rag_document.total_chunks > 0
+            else 0
+        ),
         "has_images": len(rag_document.images) > 0,
         "image_count": len(rag_document.images),
     }

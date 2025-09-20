@@ -6,8 +6,9 @@
         "editor.defaultFormatter": "ms-python.black-formatter",
         // Enable Ruff as the linter
         "editor.codeActionsOnSave": {
-            "source.fixAll": "explicit",
-            "source.organizeImports": "explicit"
+            // "source.fixAll": "explicit",
+            "source.organizeImports": "never"
+            // "source.organizeImports": "explicit",
         },
         // Disable other linters to avoid conflicts
         "python.linting.flake8Enabled": false,
