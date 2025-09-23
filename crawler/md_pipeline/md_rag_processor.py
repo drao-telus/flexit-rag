@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from flexit_llm.utility.topic_extractor import TopicExtractor
 
-from .md_chunking_strategy import ChunkingStrategyManager
+from crawler.md_pipeline.md_chunking_strategy import ChunkingStrategyManager
+from crawler.url.url_mapper import URLMapper
 
 
 @dataclass
@@ -46,6 +47,7 @@ class RAGDocument:
     images: List[Dict[str, str]]
     metadata: Dict[str, Any]
     created_at: str
+    page_url: str = ""  # Original page URL from page_url.py
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -60,15 +62,43 @@ class MDRAGProcessor:
     Designed to handle files efficiently without reading complete long files.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        enable_url_mapping: bool = True,
+        base_url: str = "",
+    ):
         self.chunking_manager = ChunkingStrategyManager()
         self.topic_extractor = TopicExtractor()
+        self.url_mapper = None
+
+        # Initialize URL mapper if enabled
+        if enable_url_mapping:
+            try:
+                self.url_mapper = URLMapper(
+                    "crawler/url/page_url.py", base_url=base_url
+                )
+                # Build mapping cache to ensure fresh mappings
+                result = self.url_mapper.build_mapping_cache()
+                if result["success"]:
+                    print(
+                        f"URL mapping cache built: {result['unique_filenames']} mappings created"
+                    )
+                    if base_url:
+                        print(f"Base URL configured: {base_url}")
+                else:
+                    print(
+                        f"Warning: Failed to build URL mapping cache: {result.get('error', 'Unknown error')}"
+                    )
+            except Exception as e:
+                print(f"Warning: Could not initialize URL mapper: {e}")
+                self.url_mapper = None
 
     def process_markdown_to_rag(
         self,
         markdown_content: str,
         source_file: str,
         metadata: Optional[Dict[str, Any]] = None,
+        images_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> RAGDocument:
         """
         Process markdown content into a RAG document.
@@ -103,10 +133,10 @@ class MDRAGProcessor:
             markdown_content, markdown_content, metadata
         )
 
-        # Extract images info (simple pattern matching)
-        images = self._extract_images_info_simple(markdown_content)
+        # Use provided images metadata or empty list
+        images = images_metadata if images_metadata else []
 
-        # Generate document ID
+        # Generate document ID using original markdown content (already clean)
         document_id = self._generate_document_id(source_file, markdown_content)
 
         # Add topic information to metadata
@@ -126,6 +156,9 @@ class MDRAGProcessor:
             )
             rag_chunks.append(rag_chunk)
 
+        # Resolve page URL using URL mapper
+        page_url = self._resolve_page_url(source_file)
+
         # Create RAG document
         rag_document = RAGDocument(
             document_id=document_id,
@@ -138,6 +171,7 @@ class MDRAGProcessor:
             images=images,
             metadata=metadata_with_topics,
             created_at=datetime.now().isoformat(),
+            page_url=page_url,
         )
 
         return rag_document
@@ -198,62 +232,6 @@ class MDRAGProcessor:
                     break
 
         return title, breadcrumb
-
-    def _extract_images_info_simple(
-        self, markdown_content: str
-    ) -> List[Dict[str, str]]:
-        """
-        Extract image information using simple pattern matching.
-        Replaces the semantic processor for image extraction.
-        """
-        images = []
-        lines = markdown_content.split("\n")
-
-        for line in lines:
-            line = line.strip()
-
-            # Pattern: [Image: description] format
-            if line.startswith("[Image:") and line.endswith("]"):
-                description = line[7:-1].strip()  # Remove [Image: and ]
-                images.append(
-                    {
-                        "type": "referenced_image",
-                        "description": description,
-                        "alt_text": description,
-                    }
-                )
-
-            # Pattern: Standard markdown image ![alt](src)
-            elif line.startswith("![") and "](" in line and line.endswith(")"):
-                try:
-                    alt_end = line.index("](")
-                    src_start = alt_end + 2
-                    alt_text = line[2:alt_end]
-                    src = line[src_start:-1]
-                    images.append(
-                        {
-                            "type": "markdown_image",
-                            "src": src,
-                            "alt_text": alt_text,
-                            "description": alt_text,
-                        }
-                    )
-                except ValueError:
-                    # Malformed markdown image, skip
-                    continue
-
-            # Pattern: HTML img tags
-            elif "<img" in line.lower():
-                # Simple extraction for HTML img tags
-                images.append(
-                    {
-                        "type": "html_image",
-                        "description": "HTML image element",
-                        "alt_text": "HTML image",
-                    }
-                )
-
-        return images
 
     def _process_structured_chunk(
         self,
@@ -380,6 +358,33 @@ class MDRAGProcessor:
         """Generate a unique chunk ID."""
         chunk_hash = hashlib.md5(chunk.encode()).hexdigest()[:8]
         return f"chunk_{chunk_index}_{chunk_hash}"
+
+    def _resolve_page_url(self, source_file: str) -> str:
+        """
+        Resolve the original page URL from the source file using URL mapper.
+
+        Args:
+            source_file: Path to the source HTML file
+
+        Returns:
+            Full URL (if base_url configured) or relative URL from page_url.py, or empty string if not found
+        """
+        if not self.url_mapper:
+            return ""
+
+        try:
+            # Extract filename from source file path (without extension)
+            source_path = Path(source_file)
+            filename = source_path.stem
+
+            # Get the full URL (includes base_url if configured) or relative URL
+            page_url = self.url_mapper.get_full_url(filename)
+
+            return page_url
+
+        except Exception as e:
+            print(f"Warning: Could not resolve page URL for {source_file}: {e}")
+            return ""
 
     def save_rag_document(self, rag_document: RAGDocument, output_path: str) -> None:
         """Save RAG document to JSON file."""

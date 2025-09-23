@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 from dotenv import load_dotenv
 
-from data_processor.document_loader import DocumentLoader
+from vector_processor.document_loader import DocumentLoader
 from flexit_llm.utility.cache_data_loader import CacheDataLoader
 from flexit_llm.utility.embeddings import (
     EmbeddingConfig,

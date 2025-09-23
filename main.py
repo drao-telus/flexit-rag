@@ -5,7 +5,7 @@
 # asyncio.run(crawler.execute_crawler())
 
 
-from data_processor.qdrant_pipeline import QdrantPipeline
+from vector_processor.qdrant_pipeline import QdrantPipeline
 
 # Initialize the complete pipeline
 pipeline = QdrantPipeline(collection_name="flexit_rag_collection")

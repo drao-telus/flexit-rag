@@ -1,6 +1,7 @@
 """HTML to Markdown converter with image path mapping and semantic structure preservation."""
 
 import re
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -11,13 +12,21 @@ from bs4 import BeautifulSoup, Tag
 class HTMLToMDConverter:
     """Converts filtered HTML content to clean Markdown format."""
 
-    def __init__(self):
+    def __init__(self, url_mapper=None, current_url=None):
         self.image_base_path = "crawler/process-images"
+        self.url_mapper = url_mapper
+        self.current_url = current_url  # Current page URL for resolving relative links
+        self.images_metadata = []  # Store images during conversion
+        self.content_position = 0  # Track position for unique IDs
 
     def convert_html_to_md(
         self, html_content: str, source_url: str, md_handler=None
     ) -> Dict:
-        """Convert HTML content to Markdown format with metadata."""
+        """Convert HTML content to Markdown format with separate image metadata."""
+        # Reset for each conversion
+        self.images_metadata = []
+        self.content_position = 0
+
         soup = BeautifulSoup(html_content, "html.parser")
 
         # Extract metadata
@@ -38,6 +47,7 @@ class HTMLToMDConverter:
         return {
             "markdown_content": markdown_content.strip(),
             "metadata": metadata,
+            "images_metadata": self.images_metadata,  # Separate image metadata
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -133,6 +143,9 @@ class HTMLToMDConverter:
 
         # Paragraphs
         elif tag_name == "p":
+            # Skip figure captions as they are handled by image processing
+            if "figure" in tag.get("class", []):
+                return ""
             text = self._process_paragraph(tag)
             return text if text else ""
 
@@ -181,7 +194,7 @@ class HTMLToMDConverter:
             return text if text else ""
 
     def _process_paragraph(self, p_tag: Tag) -> str:
-        """Process paragraph with inline elements."""
+        """Process paragraph with inline elements, handling nested content recursively."""
         parts = []
 
         for child in p_tag.children:
@@ -191,15 +204,56 @@ class HTMLToMDConverter:
                 elif child.name == "a":
                     parts.append(self._convert_link_to_md(child))
                 elif child.name in ["strong", "b"]:
-                    text = self._clean_text(child)
-                    parts.append(f"**{text}**" if text else "")
+                    # Check if this element contains nested links or other elements
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(f"**{nested_content}**" if nested_content else "")
                 elif child.name in ["em", "i"]:
-                    text = self._clean_text(child)
-                    parts.append(f"*{text}*" if text else "")
+                    # Check if this element contains nested links or other elements
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(f"*{nested_content}*" if nested_content else "")
+                elif child.name in ["span", "div", "small", "u", "sup", "sub"]:
+                    # Process inline elements that might contain nested links
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(nested_content if nested_content else "")
                 else:
-                    text = self._clean_text(child)
-                    parts.append(text if text else "")
+                    # For other elements, try to process nested content first
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(nested_content if nested_content else "")
             elif hasattr(child, "strip"):
+                clean_text = self._clean_text_content(child.strip())
+                parts.append(clean_text if clean_text else "")
+
+        return " ".join(parts).strip()
+
+    def _process_inline_element_content(self, element: Tag) -> str:
+        """Process content within inline elements, handling nested links and formatting."""
+        if not element:
+            return ""
+
+        parts = []
+
+        for child in element.children:
+            if isinstance(child, Tag):
+                if child.name == "a":
+                    # Process nested links
+                    parts.append(self._convert_link_to_md(child))
+                elif child.name == "img":
+                    # Process nested images
+                    parts.append(self._convert_image_to_md(child))
+                elif child.name in ["strong", "b"]:
+                    # Recursively process nested formatting
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(f"**{nested_content}**" if nested_content else "")
+                elif child.name in ["em", "i"]:
+                    # Recursively process nested formatting
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(f"*{nested_content}*" if nested_content else "")
+                else:
+                    # For other nested elements, recursively process their content
+                    nested_content = self._process_inline_element_content(child)
+                    parts.append(nested_content if nested_content else "")
+            elif hasattr(child, "strip"):
+                # Text node
                 clean_text = self._clean_text_content(child.strip())
                 parts.append(clean_text if clean_text else "")
 
@@ -446,11 +500,11 @@ class HTMLToMDConverter:
         return result
 
     def _convert_image_to_md(self, img_tag: Tag) -> str:
-        """Convert image to Markdown with proper path mapping."""
+        """Convert image to clean Markdown and store metadata separately."""
         src = img_tag.get("src", "")
         alt = img_tag.get("alt", "")
 
-        # Look for figure caption in next sibling (paragraph-specific logic)
+        # Look for figure caption in next sibling
         caption = ""
         try:
             next_sibling = img_tag.find_parent("p").find_next_sibling(
@@ -461,41 +515,138 @@ class HTMLToMDConverter:
         except:
             pass
 
-        alt = caption if caption else alt
+        # Generate description: use caption, alt text, or filename-based description
+        description = self._generate_image_description(caption, alt, src)
+
+        # Track position for unique ID generation
+        self.content_position += 1
 
         # Map image path to process-images structure
         if src:
             # Use the image extractor utility for proper mapping
             from .image_extractor_utility import ImageExtractorUtility
 
-            extractor = ImageExtractorUtility()
+            extractor = ImageExtractorUtility(
+                url_mapper=self.url_mapper, current_url=self.current_url
+            )
+
+            # First, try to resolve the image src to get the proper URL
+            resolved_src = extractor._resolve_image_src(src)
 
             # Process the image source to get proper mapping
             image_info = extractor._process_image_src(src, alt)
-            if image_info and image_info["exists"]:
-                # Use a more readable format for RAG processing
-                image_name = Path(image_info["local_path"]).stem
-                if alt:
-                    return f"[Image: {alt} - {image_name}]"
+            if image_info:
+                # Generate unique image ID
+                image_id = str(self._generate_image_id(src, alt, self.content_position))
+
+                # Generate description using caption, alt text, or fallback to "Image"
+                description = self._generate_image_description(caption, alt, src)
+
+                # Create complete metadata object
+                image_metadata = {
+                    "image_id": image_id,
+                    "type": image_info.get("type", "missing_image"),
+                    "description": description,
+                    "filename": (
+                        Path(image_info["local_path"]).name
+                        if image_info["local_path"]
+                        else ""
+                    ),
+                    "local_path": image_info["local_path"],
+                    "category": image_info.get("category", ""),
+                    "exists": image_info["exists"],
+                    "image_url": image_info.get("image_url", ""),
+                    "enhanced_image_url": image_info.get("enhanced_image_url", ""),
+                    "original_src": src,
+                    "position_in_content": self.content_position,
+                }
+
+                # Store metadata separately
+                self.images_metadata.append(image_metadata)
+
+                # Return proper markdown image syntax with resolved URL
+                image_url = image_info.get("enhanced_image_url", "") or image_info.get(
+                    "image_url", ""
+                )
+                if image_url:
+                    return f"![{description}]({image_url}){{image_id: {image_id}}}"
+                elif resolved_src and resolved_src != src:
+                    # Use resolved URL even if image doesn't exist locally
+                    return f"![{description}]({resolved_src}){{image_id: {image_id}}}"
                 else:
-                    return f"[Image: {image_name}]"
+                    # Fallback to RAG-friendly format only if no URL can be constructed
+                    return (
+                        f"[Image: {description}]{{image_id: {image_id}}}"
+                        if description
+                        else f"[Image: {Path(src).stem}]{{image_id: {image_id}}}"
+                    )
             else:
-                # Keep original path if not found
-                if alt:
-                    return f"[Image: {alt}]"
+                # Handle case where image_info is None
+                image_id = str(self._generate_image_id(src, alt, self.content_position))
+
+                image_metadata = {
+                    "image_id": image_id,
+                    "type": "missing_image",
+                    "description": alt,
+                    "filename": "",
+                    "local_path": "",
+                    "category": "",
+                    "exists": False,
+                    "image_url": "",
+                    "enhanced_image_url": "",
+                    "original_src": src,
+                    "position_in_content": self.content_position,
+                }
+
+                self.images_metadata.append(image_metadata)
+
+                # Try to resolve the URL even if image doesn't exist locally
+                if resolved_src and resolved_src != src:
+                    return f"![{alt}]({resolved_src}){{image_id:{image_id}}}"
                 else:
-                    return f"[Image: {Path(src).stem}]"
+                    return (
+                        f"[Image: {alt}]{{image_id:{image_id}}}"
+                        if alt
+                        else f"[Image: {Path(src).stem}]{{image_id:{image_id}}}"
+                    )
 
-        return f"[Image: {alt}]" if alt else "[Image]"
+        return (
+            f"[Image: {alt}]{{image_id:{image_id}}}"
+            if alt
+            else f"[Image]{{image_id:{image_id}}}"
+        )
 
-    def _map_image_path(self, image_name: str) -> str:
-        """Map image name to the correct path in process-images structure."""
-        # This method is now deprecated in favor of using ImageExtractorUtility
-        # Keeping for backward compatibility
-        return f"Images/{image_name}"
+    def _generate_image_description(self, caption: str, alt_text: str, src: str) -> str:
+        """Generate image description: use caption, alt text, or static 'Image' fallback."""
+        if caption and caption.strip():
+            return caption.strip()
+
+        if alt_text and alt_text.strip():
+            return alt_text.strip()
+
+        # Static fallback instead of using src
+        return "Image"
+
+    def _generate_image_description_with_url(
+        self, alt_text: str, enhanced_image_url: str
+    ) -> str:
+        """Generate image description: use alt text, enhanced_image_url, or static 'Image' fallback."""
+        if alt_text and alt_text.strip():
+            return alt_text.strip()
+
+        if enhanced_image_url and enhanced_image_url.strip():
+            return enhanced_image_url.strip()
+
+        # Static fallback
+        return "Image"
+
+    def _generate_image_id(self, src: str, alt_text: str, position: int) -> str:
+        """Generate unique image ID based on source, alt text, and position"""
+        content = f"{src}_{alt_text}_{position}"
+        return hashlib.md5(content.encode()).hexdigest()[:8]
 
     def _convert_link_to_md(self, a_tag: Tag) -> str:
-        """Convert link to Markdown."""
+        """Convert link to Markdown with href resolution."""
         href = a_tag.get("href", "")
 
         # Check if this link contains an image (common pattern for image links)
@@ -507,11 +658,123 @@ class HTMLToMDConverter:
         text = self._clean_text(a_tag)
 
         if href and text:
-            return f"[{text}]({href})"
+            # Resolve href using URL mapper if available
+            resolved_href = self._resolve_href(href)
+            return f"[{text}]({resolved_href})"
         elif text:
             return text
         else:
             return ""
+
+    def _resolve_href(self, href: str) -> str:
+        """
+        Resolve href using the page_url extracted at root level.
+
+        Handles various relative URL patterns:
+        - href="../Plan Setup Reference/PlanSetup/Benefit Plans.htm" (parent directory)
+        - href="Annual Enrollment Timeline.htm" (same directory)
+        - href="/root/path.htm" (root-relative)
+
+        Args:
+            href: The href attribute value from the HTML link
+
+        Returns:
+            Resolved full URL if possible, otherwise original href
+        """
+        if not self.url_mapper or not href:
+            return href
+
+        # Clean href - remove fragments and whitespace
+        clean_href = href.strip().split("#")[0]
+
+        # If href is already absolute, return as is
+        if clean_href.startswith(("http://", "https://")):
+            return clean_href
+
+        # If we have a base_url, construct the full URL
+        if self.url_mapper.base_url:
+            if clean_href.startswith("/"):
+                # Root-relative URL: href="/root/path.htm"
+                return f"{self.url_mapper.base_url}{clean_href}"
+            elif clean_href.startswith("../"):
+                # Parent directory relative: href="../Plan Setup Reference/PlanSetup/Benefit Plans.htm"
+                # Get current page URL to determine current directory
+                current_url = self._get_current_page_url()
+                if current_url:
+                    resolved_url = self._resolve_relative_path(current_url, clean_href)
+                    return f"{self.url_mapper.base_url}{resolved_url}"
+                else:
+                    # Fallback: treat as relative to base
+                    return f"{self.url_mapper.base_url}/{clean_href}"
+            else:
+                # Same directory relative: href="Annual Enrollment Timeline.htm"
+                # Get current page URL to determine current directory
+                current_url = self._get_current_page_url()
+                if current_url:
+                    # Extract directory from current URL
+                    current_dir = "/".join(current_url.split("/")[:-1])
+                    if current_dir:
+                        return f"{self.url_mapper.base_url}{current_dir}/{clean_href}"
+                    else:
+                        return f"{self.url_mapper.base_url}/{clean_href}"
+                else:
+                    # Fallback: treat as relative to base
+                    return f"{self.url_mapper.base_url}/{clean_href}"
+
+        # Fallback: return original href
+        return href
+
+    def _get_current_page_url(self) -> str:
+        """Get the current page URL from the URL mapper."""
+        if not self.current_url or not self.url_mapper:
+            return ""
+
+        # If current_url is a filename, get the corresponding URL
+        if not self.current_url.startswith(("http://", "https://", "/")):
+            # It's a filename, get the relative URL
+            return self.url_mapper.get_relative_url(self.current_url)
+
+        # It's already a URL
+        return self.current_url
+
+    def _resolve_relative_path(self, current_url: str, relative_href: str) -> str:
+        """
+        Resolve relative path like '../Plan Setup Reference/PlanSetup/Benefit Plans.htm'
+        against current URL.
+
+        Args:
+            current_url: Current page URL (relative, like '/Annual Enrollment/page.htm')
+            relative_href: Relative href (like '../Plan Setup Reference/PlanSetup/Benefit Plans.htm')
+
+        Returns:
+            Resolved relative URL
+        """
+        # Split current URL into parts
+        current_parts = [part for part in current_url.split("/") if part]
+
+        # Split relative href into parts
+        href_parts = [part for part in relative_href.split("/") if part]
+
+        # Start with current directory (remove filename)
+        if current_parts:
+            current_parts = current_parts[:-1]  # Remove filename, keep directory
+
+        # Process each part of the relative href
+        for part in href_parts:
+            if part == "..":
+                # Go up one directory
+                if current_parts:
+                    current_parts.pop()
+            elif part == ".":
+                # Stay in current directory
+                continue
+            else:
+                # Add this part to the path
+                current_parts.append(part)
+
+        # Reconstruct the path
+        resolved_path = "/" + "/".join(current_parts) if current_parts else "/"
+        return resolved_path
 
     def _clean_text(self, element: Tag) -> str:
         """Clean text content removing extra whitespace."""

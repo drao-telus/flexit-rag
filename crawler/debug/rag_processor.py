@@ -11,10 +11,11 @@ import random
 import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from text_extractor import TextExtractor
+from html_text_extractor import TextExtractor
+from image_analysis_module import ImageAnalysisModule
 
 
-class RAGValidationTest:
+class RAGProcessor:
     """Main class for RAG validation testing."""
 
     def __init__(self, base_path: str = "crawler/result_data"):
@@ -23,6 +24,7 @@ class RAGValidationTest:
         self.rag_output_path = self.base_path / "rag_output"
         self.report_path = Path("crawler/debug/report")
         self.text_extractor = TextExtractor()
+        self.image_analyzer = ImageAnalysisModule()
 
         # Ensure report directory exists
         self.report_path.mkdir(parents=True, exist_ok=True)
@@ -152,16 +154,28 @@ class RAGValidationTest:
             # Compare texts
             comparison_results = self.text_extractor.compare_texts(html_text, rag_text)
 
+            # Perform image analysis
+            image_analysis = self.image_analyzer.analyze_rag_file_images(
+                str(rag_file), rag_json_content
+            )
+
             # Add actual content for HTML report
             comparison_results["html_text"] = html_text
             comparison_results["rag_text"] = rag_text
             comparison_results["rag_json"] = rag_json_content
+            comparison_results["image_analysis"] = image_analysis
 
             result["comparison_results"] = comparison_results
             result["validation_successful"] = True
 
+            # Enhanced logging with image information
+            image_stats = image_analysis.get("image_statistics", {})
+            missing_images = image_stats.get("missing_count", 0)
+            mapped_images = image_stats.get("successfully_mapped", 0)
+
             print(
-                f"✓ Validated {html_file.name} - Coverage: {comparison_results['coverage_percentage']}%"
+                f"✓ Validated {html_file.name} - Coverage: {comparison_results['coverage_percentage']}% | "
+                f"Images: {mapped_images} mapped, {missing_images} missing"
             )
 
         except Exception as e:
@@ -205,6 +219,9 @@ class RAGValidationTest:
         successful_validations = 0
         total_coverage = 0
 
+        # Image analysis tracking
+        all_image_analyses = []
+
         print(f"\nValidating {len(selected_files)} file pairs...")
         print("-" * 60)
 
@@ -217,10 +234,22 @@ class RAGValidationTest:
                 successful_validations += 1
                 total_coverage += result["comparison_results"]["coverage_percentage"]
 
+                # Collect image analysis data
+                image_analysis = result["comparison_results"].get("image_analysis")
+                if image_analysis:
+                    all_image_analyses.append(image_analysis)
+
         # Calculate summary statistics
         average_coverage = (
             total_coverage / successful_validations if successful_validations > 0 else 0
         )
+
+        # Generate image analysis summary
+        image_summary = {}
+        if all_image_analyses:
+            image_summary = self.image_analyzer.generate_image_analysis_summary(
+                all_image_analyses
+            )
 
         summary = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -229,6 +258,7 @@ class RAGValidationTest:
             "failed_validations": len(selected_files) - successful_validations,
             "average_coverage_percentage": round(average_coverage, 2),
             "validation_results": validation_results,
+            "image_analysis_summary": image_summary,
         }
 
         print("-" * 60)
@@ -237,6 +267,26 @@ class RAGValidationTest:
         print(f"Successful validations: {summary['successful_validations']}")
         print(f"Failed validations: {summary['failed_validations']}")
         print(f"Average coverage: {summary['average_coverage_percentage']}%")
+
+        # Print image analysis summary
+        if image_summary:
+            print(f"\nIMAGE ANALYSIS SUMMARY:")
+            print(
+                f"Files with content references: {image_summary.get('files_with_content_references', 0)}"
+            )
+            print(
+                f"Files with missing images: {image_summary.get('files_with_missing_images', 0)}"
+            )
+            print(
+                f"Total content references: {image_summary.get('total_content_references', 0)}"
+            )
+            print(f"Total mapped images: {image_summary.get('total_mapped_images', 0)}")
+            print(
+                f"Total missing images: {image_summary.get('total_missing_images', 0)}"
+            )
+            print(
+                f"Overall mapping success rate: {image_summary.get('overall_mapping_success_rate', 0)}%"
+            )
 
         # Save results to JSON file
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -266,6 +316,64 @@ class RAGValidationTest:
                 print(f"   RAG Text Length: {comp['rag_text_length']} chars")
                 print(f"   Missing Sentences: {comp['missing_sentences_count']}")
 
+                # Print enhanced image analysis information
+                image_analysis = comp.get("image_analysis", {})
+                if image_analysis:
+                    image_stats = image_analysis.get("image_statistics", {})
+                    images_in_array = image_analysis.get("images_in_array", [])
+
+                    print(f"   Image Analysis:")
+                    print(
+                        f"     - Category: {image_analysis.get('document_category', 'Unknown')}"
+                    )
+                    print(
+                        f"     - Images in array: {image_stats.get('total_images_in_array', 0)}"
+                    )
+                    print(
+                        f"     - Content references: {image_stats.get('total_content_references', 0)}"
+                    )
+                    print(
+                        f"     - Successfully mapped: {image_stats.get('successfully_mapped', 0)}"
+                    )
+                    print(
+                        f"     - Missing images: {image_stats.get('missing_count', 0)}"
+                    )
+                    print(
+                        f"     - Mapping success rate: {image_stats.get('mapping_success_rate', 0)}%"
+                    )
+
+                    # Show image array details with enhanced structure
+                    if images_in_array:
+                        print(f"     - Image array details:")
+                        for idx, img in enumerate(images_in_array[:3]):  # Show first 3
+                            print(
+                                f"       • [{idx+1}] {img.get('filename', 'Unknown')}"
+                            )
+                            print(f"         Type: {img.get('type', 'N/A')}")
+                            print(f"         Exists: {img.get('exists', False)}")
+                            print(
+                                f"         Position: {img.get('position_in_content', 0)}"
+                            )
+                            if img.get("image_id"):
+                                print(f"         ID: {img.get('image_id', '')}")
+                        if len(images_in_array) > 3:
+                            print(
+                                f"       • ... and {len(images_in_array) - 3} more images"
+                            )
+
+                    # Show missing images if any
+                    missing_images = image_analysis.get("missing_images", [])
+                    if missing_images:
+                        print(f"     - Missing image details:")
+                        for missing in missing_images[:3]:  # Show first 3
+                            print(
+                                f"       • {missing.get('reference', 'Unknown')} - {missing.get('reason', 'Unknown reason')}"
+                            )
+                        if len(missing_images) > 3:
+                            print(
+                                f"       • ... and {len(missing_images) - 3} more missing images"
+                            )
+
                 if comp["missing_sentences_count"] > 0:
                     print(f"   First few missing sentences:")
                     for j, sentence in enumerate(comp["missing_sentences"][:3]):
@@ -277,7 +385,7 @@ class RAGValidationTest:
 def main():
     """Main function to run the validation test."""
     # Initialize and run validation
-    validator = RAGValidationTest()
+    validator = RAGProcessor()
     results = validator.run_validation(file_count=10)
 
     # Print detailed results if validation was successful

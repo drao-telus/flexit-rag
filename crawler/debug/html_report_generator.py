@@ -685,17 +685,44 @@ class HTMLReportGenerator:
             </div>
             """
 
-        # Sort results by coverage percentage (ascending order - lowest coverage first)
-        def get_coverage(result):
+        # Sort results by image issues first, then by coverage percentage (ascending order - lowest coverage first)
+        def get_sort_key(result):
             if not result.get("validation_successful", False):
-                return -1  # Failed validations go first
-            return result.get("comparison_results", {}).get("coverage_percentage", 0)
+                return (
+                    0,
+                    -1,
+                )  # Failed validations go first (0 = highest priority, -1 = lowest coverage)
 
-        sorted_results = sorted(validation_results, key=get_coverage)
+            comparison = result.get("comparison_results", {})
+            coverage = comparison.get("coverage_percentage", 0)
+
+            # Get image analysis for sorting
+            image_analysis = comparison.get("image_analysis", {})
+            image_stats = image_analysis.get("image_statistics", {})
+
+            total_content_refs = image_stats.get("total_content_references", 0)
+            mapped_images = image_stats.get("successfully_mapped", 0)
+
+            # Calculate image issue priority
+            if total_content_refs == 0:
+                image_priority = (
+                    3  # No images needed - lowest priority for image issues
+                )
+            elif mapped_images < total_content_refs:
+                image_priority = 1  # Has missing images - highest priority
+            else:
+                image_priority = 2  # All images mapped - medium priority
+
+            return (
+                image_priority,
+                coverage,
+            )  # Sort by image issues first, then coverage
+
+        sorted_results = sorted(validation_results, key=get_sort_key)
 
         results_html = """
         <div class="results-section">
-            <div class="results-header">Detailed Results (Ordered by Coverage: Lowest to Highest)</div>
+            <div class="results-header">Detailed Results (Ordered by Image Issues, then Coverage: Lowest to Highest)</div>
         """
 
         for i, result in enumerate(sorted_results, 1):
@@ -726,6 +753,33 @@ class HTMLReportGenerator:
                 status_class = "error"
             coverage_text = f"{coverage}%"
 
+        # Get image analysis for header
+        image_analysis = comparison.get("image_analysis", {}) if successful else {}
+        image_stats = image_analysis.get("image_statistics", {})
+
+        # Calculate image coverage percentage
+        total_content_refs = image_stats.get("total_content_references", 0)
+        mapped_images = image_stats.get("successfully_mapped", 0)
+        image_coverage_percent = (
+            (mapped_images / total_content_refs * 100)
+            if total_content_refs > 0
+            else 100
+        )
+
+        # Determine image coverage class
+        if total_content_refs == 0:
+            image_coverage_class = "high"  # No images needed
+            image_coverage_text = "N/A"
+        elif image_coverage_percent == 100:
+            image_coverage_class = "high"
+            image_coverage_text = f"{image_coverage_percent:.0f}%"
+        elif image_coverage_percent >= 80:
+            image_coverage_class = "medium"
+            image_coverage_text = f"{image_coverage_percent:.0f}%"
+        else:
+            image_coverage_class = "low"
+            image_coverage_text = f"{image_coverage_percent:.0f}%"
+
         # Build file header
         file_html = f"""
         <div class="file-result">
@@ -735,6 +789,9 @@ class HTMLReportGenerator:
                     <span class="stat">RAG File: {html.escape(rag_file)}</span>
                     <span class="stat coverage-{self._get_coverage_class(comparison.get("coverage_percentage", 0))}">
                         Coverage: {coverage_text}
+                    </span>
+                    <span class="stat coverage-{image_coverage_class}">
+                        Images: {image_coverage_text} ({mapped_images}/{total_content_refs})
                     </span>
                 </div>
                 <span class="toggle-icon">▼</span>
@@ -788,6 +845,7 @@ class HTMLReportGenerator:
         rag_json_id = f"rag-json{unique_suffix}"
         html_content_id = f"html-content{unique_suffix}"
         topics_content_id = f"topics-content{unique_suffix}"
+        image_analysis_id = f"image-analysis{unique_suffix}"
 
         # Add content comparison section
         details_html += f"""
@@ -797,6 +855,7 @@ class HTMLReportGenerator:
                 <button class="tab-button" onclick="showTab(this, '{rag_json_id}')">RAG JSON</button>
                 <button class="tab-button" onclick="showTab(this, '{html_content_id}')">HTML Content</button>
                 <button class="tab-button" onclick="showTab(this, '{topics_content_id}')">Topics</button>
+                <button class="tab-button" onclick="showTab(this, '{image_analysis_id}')">Image Analysis</button>
             </div>
         """
 
@@ -827,12 +886,21 @@ class HTMLReportGenerator:
             </div>
         """
 
-        # Topics tab (new fourth tab)
+        # Topics tab (fourth tab)
         topics_content = self._get_topics_content(rag_json)
         details_html += f"""
             <div id="{topics_content_id}" class="tab-content">
                 <h4>Extracted Topics</h4>
                 <div class="content-text">{topics_content}</div>
+            </div>
+        """
+
+        # Image Analysis tab (fifth tab)
+        image_analysis_content = self._get_image_analysis_content(comparison)
+        details_html += f"""
+            <div id="{image_analysis_id}" class="tab-content">
+                <h4>Image Analysis</h4>
+                <div class="content-text">{image_analysis_content}</div>
             </div>
         </div>
         """
@@ -991,6 +1059,87 @@ class HTMLReportGenerator:
 
         except Exception as e:
             return f"Error extracting topics: {str(e)}"
+
+    def _get_image_analysis_content(self, comparison: Dict[str, Any]) -> str:
+        """Extract and format image analysis information."""
+        try:
+            image_analysis = comparison.get("image_analysis", {})
+            if not image_analysis:
+                return "No image analysis available"
+
+            image_stats = image_analysis.get("image_statistics", {})
+
+            # Build image analysis content
+            content = ""
+
+            # Basic statistics
+            content += "=== IMAGE ANALYSIS SUMMARY ===\n"
+            content += f"Document Category: {image_analysis.get('document_category', 'Unknown')}\n"
+            content += (
+                f"Images in RAG array: {image_stats.get('total_images_in_array', 0)}\n"
+            )
+            content += f"Content image references: {image_stats.get('total_content_references', 0)}\n"
+            content += (
+                f"Successfully mapped: {image_stats.get('successfully_mapped', 0)}\n"
+            )
+            content += f"Missing images: {image_stats.get('missing_count', 0)}\n"
+            content += f"Mapping success rate: {image_stats.get('mapping_success_rate', 0)}%\n\n"
+
+            # Images in array
+            images_in_array = image_analysis.get("images_in_array", [])
+            if images_in_array:
+                content += "=== IMAGES IN RAG ARRAY ===\n"
+                for i, img in enumerate(images_in_array, 1):
+                    content += f"{i}. {img.get('filename', 'Unknown')}\n"
+                    content += f"   Description: {img.get('description', 'N/A')}\n"
+                    content += f"   URL: {img.get('image_url', 'N/A')}\n"
+                    content += f"   Local Path: {img.get('local_path', 'N/A')}\n\n"
+            else:
+                content += (
+                    "=== IMAGES IN RAG ARRAY ===\nNo images found in RAG array\n\n"
+                )
+
+            # Content references
+            content_refs = image_analysis.get("content_image_references", [])
+            if content_refs:
+                content += "=== CONTENT IMAGE REFERENCES ===\n"
+                for i, ref in enumerate(content_refs, 1):
+                    content += f"{i}. {ref}\n"
+                content += "\n"
+            else:
+                content += "=== CONTENT IMAGE REFERENCES ===\nNo image references found in content\n\n"
+
+            # Successfully mapped images
+            mapped_images = image_analysis.get("mapped_images", [])
+            if mapped_images:
+                content += "=== SUCCESSFULLY MAPPED IMAGES ===\n"
+                for i, img in enumerate(mapped_images, 1):
+                    content += f"{i}. Reference: {img.get('reference', 'Unknown')}\n"
+                    content += f"   Filename: {img.get('filename', 'Unknown')}\n"
+                    content += f"   Path: {img.get('path', 'Unknown')}\n"
+                    content += f"   Status: {img.get('status', 'Unknown')}\n\n"
+            else:
+                content += "=== SUCCESSFULLY MAPPED IMAGES ===\nNo successfully mapped images\n\n"
+
+            # Missing images
+            missing_images = image_analysis.get("missing_images", [])
+            if missing_images:
+                content += "=== MISSING IMAGES ===\n"
+                for i, img in enumerate(missing_images, 1):
+                    content += f"{i}. Reference: {img.get('reference', 'Unknown')}\n"
+                    content += f"   Filename: {img.get('filename', 'Unknown')}\n"
+                    content += f"   Status: {img.get('status', 'Unknown')}\n"
+                    content += f"   Reason: {img.get('reason', 'Unknown')}\n"
+                    if img.get("path"):
+                        content += f"   Path: {img.get('path')}\n"
+                    content += "\n"
+            else:
+                content += "=== MISSING IMAGES ===\nNo missing images - all content references are mapped!\n\n"
+
+            return content.strip()
+
+        except Exception as e:
+            return f"Error extracting image analysis: {str(e)}"
 
     def _build_footer(self) -> str:
         """Build the footer section."""

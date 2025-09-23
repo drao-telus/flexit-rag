@@ -19,7 +19,7 @@
             "request": "launch",
             "module": "streamlit",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}\\flexit_llm",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },

@@ -236,7 +236,9 @@ dependencies = [
     { name = "markdown" },
     { name = "markdownify" },
     { name = "nltk" },
+    { name = "pandas" },
     { name = "playwright" },
+    { name = "plotly" },
     { name = "pycodestyle" },
     { name = "pylint" },
     { name = "python-dotenv" },
@@ -262,7 +264,9 @@ requires-dist = [
     { name = "markdown", specifier = ">=3.8.2" },
     { name = "markdownify", specifier = ">=1.2.0" },
     { name = "nltk", specifier = ">=3.9.1" },
+    { name = "pandas", specifier = ">=2.3.2" },
     { name = "playwright", specifier = "==1.40.0" },
+    { name = "plotly", specifier = ">=6.3.0" },
     { name = "pycodestyle", specifier = ">=2.14.0" },
     { name = "pylint", specifier = ">=3.3.8" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
@@ -867,6 +871,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/3f/871db50c0aaf8d7764d0b53de28dcdd00c5ee1c32e27452a60a6da606130/playwright-1.40.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4ec3746de69e7ba912b70e0fe3a3c6b8af97f21ece793c5db27c251da4d2f3e6", size = 36964063, upload-time = "2023-11-21T21:07:16.344Z" },
     { url = "https://files.pythonhosted.org/packages/ad/3c/8795fac8f606cb09a9dcf94993eb8bf6eae60f8d4846c3088b977d2d6f44/playwright-1.40.0-py3-none-win32.whl", hash = "sha256:3ae90ea5ad776fe5e1300a9c730244c8e57a183c6eb261044418710d51ae03c0", size = 29344613, upload-time = "2023-11-21T21:07:20.58Z" },
     { url = "https://files.pythonhosted.org/packages/34/32/e2d92c763493dd614a9e65bbf0ceaf62de9c4bdebe5df39e63b0c736b795/playwright-1.40.0-py3-none-win_amd64.whl", hash = "sha256:ba5a89953aedb158025e4581eafb6fdeebb3d58acd9ce24b59f691b1e2a861bc", size = 29344613, upload-time = "2023-11-21T21:07:24.184Z" },
+]
+
+[[package]]
+name = "plotly"
+version = "6.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "narwhals" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a0/64/850de5076f4436410e1ce4f6a69f4313ef6215dfea155f3f6559335cad29/plotly-6.3.0.tar.gz", hash = "sha256:8840a184d18ccae0f9189c2b9a2943923fd5cae7717b723f36eef78f444e5a73", size = 6923926, upload-time = "2025-08-12T20:22:14.127Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/a9/12e2dc726ba1ba775a2c6922d5d5b4488ad60bdab0888c337c194c8e6de8/plotly-6.3.0-py3-none-any.whl", hash = "sha256:7ad806edce9d3cdd882eaebaf97c0c9e252043ed1ed3d382c3e3520ec07806d4", size = 9791257, upload-time = "2025-08-12T20:22:09.205Z" },
 ]
 
 [[package]]

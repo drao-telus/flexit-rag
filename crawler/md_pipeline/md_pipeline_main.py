@@ -73,11 +73,29 @@ class MDPipelineOrchestrator:
     Coordinates HTML->MD->RAG conversion with efficient processing.
     """
 
-    def __init__(self, config: PipelineConfig):
+    def __init__(
+        self,
+        config: PipelineConfig,
+        enable_url_mapping: bool = True,
+        base_url: str = "",
+    ):
         self.config = config
-        self.html_converter = HTMLToMDConverter()
-        self.rag_processor = MDRAGProcessor()
-        self.image_extractor = ImageExtractorUtility(config.process_images_dir)
+        self.rag_processor = MDRAGProcessor(
+            enable_url_mapping=enable_url_mapping,
+            base_url=base_url,
+        )
+
+        # Initialize HTML converter with URL mapper from RAG processor
+        self.html_converter = HTMLToMDConverter(
+            url_mapper=self.rag_processor.url_mapper,
+            current_url=None,  # Will be set per file during processing
+        )
+
+        self.image_extractor = ImageExtractorUtility(
+            config.process_images_dir,
+            url_mapper=self.rag_processor.url_mapper,
+            current_url=None,  # Will be set per file during processing
+        )
 
         # Ensure output directories exist
         Path(config.output_dir).mkdir(parents=True, exist_ok=True)
@@ -107,6 +125,14 @@ class MDPipelineOrchestrator:
             # Step 1: Check file size for efficient processing strategy
             file_size = html_path.stat().st_size
 
+            # Step 1.5: Set current URL for HTML converter and image extractor (for relative path resolution)
+            self.html_converter.current_url = (
+                html_path.stem
+            )  # Use filename for URL mapping
+            self.image_extractor.current_url = (
+                html_path.stem
+            )  # Use filename for URL mapping
+
             # Step 2: Convert HTML to Markdown
             if file_size > 1024 * 1024:  # > 1MB
                 # For large files, read efficiently
@@ -122,6 +148,7 @@ class MDPipelineOrchestrator:
             )
             markdown_content = markdown_result["markdown_content"]
             html_metadata = markdown_result["metadata"]
+            images_metadata = markdown_result.get("images_metadata", [])
 
             # Step 3: Process to RAG document
             rag_document = self.rag_processor.process_markdown_to_rag(
@@ -131,6 +158,7 @@ class MDPipelineOrchestrator:
                     "original_file_size": file_size,
                     "html_metadata": html_metadata,
                 },
+                images_metadata=images_metadata,
             )
 
             # Step 4: Save RAG document
@@ -155,13 +183,6 @@ class MDPipelineOrchestrator:
                     images_processed = len(
                         [img for img in copied_images if "copied_path" in img]
                     )
-
-                    # Generate image manifest if requested
-                    if self.config.generate_manifests:
-                        manifest_file = images_dir / "image_manifest.json"
-                        self.image_extractor.generate_image_manifest(
-                            copied_images, str(manifest_file)
-                        )
 
             # Step 6: Generate processing statistics
             processing_stats = get_file_processing_stats(rag_document)
@@ -271,14 +292,17 @@ class MDPipelineOrchestrator:
                     "total_files": stats.total_files,
                     "processed_files": stats.processed_files,
                     "failed_files": stats.failed_files,
-                    "success_rate": stats.processed_files / stats.total_files
-                    if stats.total_files > 0
-                    else 0,
+                    "success_rate": (
+                        stats.processed_files / stats.total_files
+                        if stats.total_files > 0
+                        else 0
+                    ),
                     "total_processing_time": stats.total_processing_time,
-                    "average_processing_time": stats.total_processing_time
-                    / stats.total_files
-                    if stats.total_files > 0
-                    else 0,
+                    "average_processing_time": (
+                        stats.total_processing_time / stats.total_files
+                        if stats.total_files > 0
+                        else 0
+                    ),
                     "total_chunks_generated": stats.total_chunks_generated,
                     "total_images_processed": stats.total_images_processed,
                     "average_file_size_reduction": stats.average_file_size_reduction,
@@ -350,9 +374,11 @@ class MDPipelineOrchestrator:
                     "existing_size": existing_size,
                     "new_size": new_size,
                     "size_reduction": size_reduction,
-                    "existing_chunks": len(existing_data.get("chunks", []))
-                    if isinstance(existing_data, dict)
-                    else 0,
+                    "existing_chunks": (
+                        len(existing_data.get("chunks", []))
+                        if isinstance(existing_data, dict)
+                        else 0
+                    ),
                     "new_chunks": new_data.get("total_chunks", 0),
                     "processing_strategy": new_data.get(
                         "processing_strategy", "unknown"
@@ -581,6 +607,10 @@ class MDPipelineOrchestrator:
         if rag_config.generate_manifests:
             self._generate_rag_processing_manifest(rag_config, stats)
 
+        # Image enhancement is now handled during HTML-to-MD conversion
+        # Enhanced metadata is embedded directly in the markdown content
+        image_mapping_stats = None
+
         # Run validation if enabled
         validation_results = None
         if rag_config.enable_validation:
@@ -613,6 +643,7 @@ class MDPipelineOrchestrator:
             "success": True,
             "stats": stats,
             "validation": validation_results,
+            "image_mapping_stats": image_mapping_stats,
             "output_directory": str(output_path),
             "config": rag_config,
         }
@@ -636,14 +667,17 @@ class MDPipelineOrchestrator:
                     "total_files": stats.total_files,
                     "processed_files": stats.processed_files,
                     "failed_files": stats.failed_files,
-                    "success_rate": stats.processed_files / stats.total_files
-                    if stats.total_files > 0
-                    else 0,
+                    "success_rate": (
+                        stats.processed_files / stats.total_files
+                        if stats.total_files > 0
+                        else 0
+                    ),
                     "total_processing_time": stats.total_processing_time,
-                    "average_processing_time": stats.total_processing_time
-                    / stats.total_files
-                    if stats.total_files > 0
-                    else 0,
+                    "average_processing_time": (
+                        stats.total_processing_time / stats.total_files
+                        if stats.total_files > 0
+                        else 0
+                    ),
                     "total_chunks_generated": stats.total_chunks_generated,
                     "total_images_processed": stats.total_images_processed,
                     "average_file_size_reduction": stats.average_file_size_reduction,

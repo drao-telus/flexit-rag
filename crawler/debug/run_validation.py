@@ -6,8 +6,7 @@ to provide a complete validation solution.
 """
 
 import sys
-from pathlib import Path
-from rag_validation_test import RAGValidationTest
+from rag_processor import RAGProcessor
 from html_report_generator import HTMLReportGenerator
 
 
@@ -30,7 +29,7 @@ def run_complete_validation(
     print("=" * 60)
 
     # Initialize validator
-    validator = RAGValidationTest()
+    validator = RAGProcessor()
 
     # Run validation
     if specific_files:

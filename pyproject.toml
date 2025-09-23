@@ -27,4 +27,6 @@ dependencies = [
     "pycodestyle>=2.14.0",
     "black>=25.9.0",
     "ruff>=0.13.1",
+    "plotly>=6.3.0",
+    "pandas>=2.3.2",
 ]
