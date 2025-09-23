@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 from .html_to_md_converter import HTMLToMDConverter
 from .md_rag_processor import MDRAGProcessor, RAGDocument, get_file_processing_stats
-from .image_extractor_utility import ImageExtractorUtility
 
 
 @dataclass
@@ -85,15 +84,10 @@ class MDPipelineOrchestrator:
             base_url=base_url,
         )
 
-        # Initialize HTML converter with URL mapper from RAG processor
+        # Initialize HTML converter with URL mapper and image mapper from RAG processor
         self.html_converter = HTMLToMDConverter(
             url_mapper=self.rag_processor.url_mapper,
-            current_url=None,  # Will be set per file during processing
-        )
-
-        self.image_extractor = ImageExtractorUtility(
-            config.process_images_dir,
-            url_mapper=self.rag_processor.url_mapper,
+            image_mapper=self.rag_processor.image_mapper,
             current_url=None,  # Will be set per file during processing
         )
 
@@ -129,9 +123,6 @@ class MDPipelineOrchestrator:
             self.html_converter.current_url = (
                 html_path.stem
             )  # Use filename for URL mapping
-            self.image_extractor.current_url = (
-                html_path.stem
-            )  # Use filename for URL mapping
 
             # Step 2: Convert HTML to Markdown
             if file_size > 1024 * 1024:  # > 1MB
@@ -148,7 +139,6 @@ class MDPipelineOrchestrator:
             )
             markdown_content = markdown_result["markdown_content"]
             html_metadata = markdown_result["metadata"]
-            images_metadata = markdown_result.get("images_metadata", [])
 
             # Step 3: Process to RAG document
             rag_document = self.rag_processor.process_markdown_to_rag(
@@ -158,7 +148,6 @@ class MDPipelineOrchestrator:
                     "original_file_size": file_size,
                     "html_metadata": html_metadata,
                 },
-                images_metadata=images_metadata,
             )
 
             # Step 4: Save RAG document
@@ -167,22 +156,6 @@ class MDPipelineOrchestrator:
 
             # Step 5: Process images if any
             images_processed = 0
-            if rag_document.images:
-                # Extract images using ImageExtractorUtility for proper format
-                extracted_images = self.image_extractor.extract_images_from_markdown(
-                    markdown_content
-                )
-
-                if extracted_images:
-                    images_dir = output_dir / "images" / html_path.stem
-                    copied_images = self.image_extractor.copy_images_to_output(
-                        extracted_images,
-                        str(images_dir),
-                        self.config.preserve_image_structure,
-                    )
-                    images_processed = len(
-                        [img for img in copied_images if "copied_path" in img]
-                    )
 
             # Step 6: Generate processing statistics
             processing_stats = get_file_processing_stats(rag_document)
@@ -713,10 +686,14 @@ def run_pipeline_cli():
         description="MD Pipeline - Convert HTML to RAG documents"
     )
     parser.add_argument(
-        "--input-dir", required=True, help="Input directory containing HTML files"
+        "--input-dir",
+        default="crawler/result_data/filtered_content",
+        help="Input directory containing HTML files",
     )
     parser.add_argument(
-        "--output-dir", required=True, help="Output directory for RAG documents"
+        "--output-dir",
+        default="crawler/result_data/rag_output",
+        help="Output directory for RAG documents",
     )
     parser.add_argument("--config", help="Configuration file (JSON)")
     parser.add_argument(

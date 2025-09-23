@@ -3,7 +3,6 @@
 import re
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
-from .image_extractor_utility import ImageExtractorUtility
 
 
 class ChunkingStrategy(ABC):
@@ -684,9 +683,9 @@ class SemanticSectionStrategy(ChunkingStrategy):
                     if overlap_text:
                         final_chunk["text"] = f"{overlap_text}\n\n{final_chunk['text']}"
                         final_chunk["overlap_info"]["has_overlap"] = True
-                        final_chunk["overlap_info"]["overlap_source"] = (
-                            "previous_section"
-                        )
+                        final_chunk["overlap_info"][
+                            "overlap_source"
+                        ] = "previous_section"
 
             # Update chunk indices
             final_chunk["chunk_index"] = i

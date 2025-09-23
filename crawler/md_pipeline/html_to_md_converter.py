@@ -1,10 +1,10 @@
 """HTML to Markdown converter with image path mapping and semantic structure preservation."""
 
 import re
-import hashlib
+import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup, Tag
 
@@ -12,20 +12,24 @@ from bs4 import BeautifulSoup, Tag
 class HTMLToMDConverter:
     """Converts filtered HTML content to clean Markdown format."""
 
-    def __init__(self, url_mapper=None, current_url=None):
-        self.image_base_path = "crawler/process-images"
+    def __init__(
+        self,
+        url_mapper=None,
+        image_mapper=None,
+        current_url=None,
+        base_url="https://d3u2d4xznamk2r.cloudfront.net",
+    ):
         self.url_mapper = url_mapper
+        self.image_mapper = image_mapper
         self.current_url = current_url  # Current page URL for resolving relative links
-        self.images_metadata = []  # Store images during conversion
-        self.content_position = 0  # Track position for unique IDs
+        self.base_url = base_url
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
 
     def convert_html_to_md(
         self, html_content: str, source_url: str, md_handler=None
     ) -> Dict:
         """Convert HTML content to Markdown format with separate image metadata."""
-        # Reset for each conversion
-        self.images_metadata = []
-        self.content_position = 0
 
         soup = BeautifulSoup(html_content, "html.parser")
 
@@ -47,7 +51,6 @@ class HTMLToMDConverter:
         return {
             "markdown_content": markdown_content.strip(),
             "metadata": metadata,
-            "images_metadata": self.images_metadata,  # Separate image metadata
             "timestamp": datetime.now().isoformat(),
         }
 
@@ -500,150 +503,62 @@ class HTMLToMDConverter:
         return result
 
     def _convert_image_to_md(self, img_tag: Tag) -> str:
-        """Convert image to clean Markdown and store metadata separately."""
-        src = img_tag.get("src", "")
-        alt = img_tag.get("alt", "")
-
-        # Look for figure caption in next sibling
-        caption = ""
+        """Convert image to Markdown with proper path mapping using image mapper."""
         try:
-            next_sibling = img_tag.find_parent("p").find_next_sibling(
-                "p", class_="figure"
-            )
-            if next_sibling:
-                caption = next_sibling.get_text().strip()
-        except:
-            pass
+            # Get image src attribute
+            img_src = img_tag.get("src", "").strip()
+            if not img_src:
+                return ""
 
-        # Generate description: use caption, alt text, or filename-based description
-        description = self._generate_image_description(caption, alt, src)
+            # If no image mapper available, return empty string
+            if not self.image_mapper:
+                self.logger.debug("No image mapper available")
+                return ""
 
-        # Track position for unique ID generation
-        self.content_position += 1
+            # Get filename for current page
+            filename = self._get_current_page_filename()
+            if not filename:
+                self.logger.warning("No filename found for current page")
+                return ""
 
-        # Map image path to process-images structure
-        if src:
-            # Use the image extractor utility for proper mapping
-            from .image_extractor_utility import ImageExtractorUtility
+            # Get images for this filename from the image mapper
+            images_for_file = self.image_mapper.get_images_for_filename(filename)
 
-            extractor = ImageExtractorUtility(
-                url_mapper=self.url_mapper, current_url=self.current_url
-            )
+            if not images_for_file:
+                self.logger.debug(f"No images found for filename: {filename}")
+                return ""
 
-            # First, try to resolve the image src to get the proper URL
-            resolved_src = extractor._resolve_image_src(src)
+            # Find matching image by comparing src attributes
+            matching_image = None
+            for image_data in images_for_file:
+                if image_data.get("src") == img_src:
+                    matching_image = image_data
+                    break
 
-            # Process the image source to get proper mapping
-            image_info = extractor._process_image_src(src, alt)
-            if image_info:
-                # Generate unique image ID
-                image_id = str(self._generate_image_id(src, alt, self.content_position))
+            if not matching_image:
+                self.logger.debug(f"No matching image found for src: {img_src}")
+                return ""
 
-                # Generate description using caption, alt text, or fallback to "Image"
-                description = self._generate_image_description(caption, alt, src)
+            # Extract image information
+            enhance_url = matching_image.get("enhance_url", "")
+            description = matching_image.get("description", "")
 
-                # Create complete metadata object
-                image_metadata = {
-                    "image_id": image_id,
-                    "type": image_info.get("type", "missing_image"),
-                    "description": description,
-                    "filename": (
-                        Path(image_info["local_path"]).name
-                        if image_info["local_path"]
-                        else ""
-                    ),
-                    "local_path": image_info["local_path"],
-                    "category": image_info.get("category", ""),
-                    "exists": image_info["exists"],
-                    "image_url": image_info.get("image_url", ""),
-                    "enhanced_image_url": image_info.get("enhanced_image_url", ""),
-                    "original_src": src,
-                    "position_in_content": self.content_position,
-                }
+            if not enhance_url:
+                self.logger.warning(f"No enhance_url found for image: {img_src}")
+                return ""
 
-                # Store metadata separately
-                self.images_metadata.append(image_metadata)
+            # Ensure enhance_url is properly encoded
+            encoded_enhance_url = self._encode_image_url(enhance_url)
 
-                # Return proper markdown image syntax with resolved URL
-                image_url = image_info.get("enhanced_image_url", "") or image_info.get(
-                    "image_url", ""
-                )
-                if image_url:
-                    return f"![{description}]({image_url}){{image_id: {image_id}}}"
-                elif resolved_src and resolved_src != src:
-                    # Use resolved URL even if image doesn't exist locally
-                    return f"![{description}]({resolved_src}){{image_id: {image_id}}}"
-                else:
-                    # Fallback to RAG-friendly format only if no URL can be constructed
-                    return (
-                        f"[Image: {description}]{{image_id: {image_id}}}"
-                        if description
-                        else f"[Image: {Path(src).stem}]{{image_id: {image_id}}}"
-                    )
+            # Generate Markdown image syntax: ![description](encoded_enhance_url)
+            if description:
+                return f"![{description}]({encoded_enhance_url})"
             else:
-                # Handle case where image_info is None
-                image_id = str(self._generate_image_id(src, alt, self.content_position))
+                return f"![]({encoded_enhance_url})"
 
-                image_metadata = {
-                    "image_id": image_id,
-                    "type": "missing_image",
-                    "description": alt,
-                    "filename": "",
-                    "local_path": "",
-                    "category": "",
-                    "exists": False,
-                    "image_url": "",
-                    "enhanced_image_url": "",
-                    "original_src": src,
-                    "position_in_content": self.content_position,
-                }
-
-                self.images_metadata.append(image_metadata)
-
-                # Try to resolve the URL even if image doesn't exist locally
-                if resolved_src and resolved_src != src:
-                    return f"![{alt}]({resolved_src}){{image_id:{image_id}}}"
-                else:
-                    return (
-                        f"[Image: {alt}]{{image_id:{image_id}}}"
-                        if alt
-                        else f"[Image: {Path(src).stem}]{{image_id:{image_id}}}"
-                    )
-
-        return (
-            f"[Image: {alt}]{{image_id:{image_id}}}"
-            if alt
-            else f"[Image]{{image_id:{image_id}}}"
-        )
-
-    def _generate_image_description(self, caption: str, alt_text: str, src: str) -> str:
-        """Generate image description: use caption, alt text, or static 'Image' fallback."""
-        if caption and caption.strip():
-            return caption.strip()
-
-        if alt_text and alt_text.strip():
-            return alt_text.strip()
-
-        # Static fallback instead of using src
-        return "Image"
-
-    def _generate_image_description_with_url(
-        self, alt_text: str, enhanced_image_url: str
-    ) -> str:
-        """Generate image description: use alt text, enhanced_image_url, or static 'Image' fallback."""
-        if alt_text and alt_text.strip():
-            return alt_text.strip()
-
-        if enhanced_image_url and enhanced_image_url.strip():
-            return enhanced_image_url.strip()
-
-        # Static fallback
-        return "Image"
-
-    def _generate_image_id(self, src: str, alt_text: str, position: int) -> str:
-        """Generate unique image ID based on source, alt text, and position"""
-        content = f"{src}_{alt_text}_{position}"
-        return hashlib.md5(content.encode()).hexdigest()[:8]
+        except Exception as e:
+            self.logger.error(f"Error converting image to markdown: {e}")
+            return ""
 
     def _convert_link_to_md(self, a_tag: Tag) -> str:
         """Convert link to Markdown with href resolution."""
@@ -666,6 +581,36 @@ class HTMLToMDConverter:
         else:
             return ""
 
+    def _encode_url_path(self, url_path: str) -> str:
+        """
+        Encode URL path components to handle spaces and special characters.
+
+        Args:
+            url_path: URL path that may contain spaces and special characters
+
+        Returns:
+            URL-encoded path with spaces converted to %20
+        """
+        if not url_path:
+            return url_path
+
+        # Split the path into components to preserve the directory structure
+        parts = url_path.split("/")
+        encoded_parts = []
+
+        for part in parts:
+            if part:  # Skip empty parts
+                # Encode each part individually, preserving forward slashes
+                # Use quote with safe='' to encode spaces and special chars but preserve basic URL structure
+                encoded_part = quote(part, safe="")
+                encoded_parts.append(encoded_part)
+            else:
+                encoded_parts.append(
+                    part
+                )  # Preserve empty parts (leading/trailing slashes)
+
+        return "/".join(encoded_parts)
+
     def _resolve_href(self, href: str) -> str:
         """
         Resolve href using the page_url extracted at root level.
@@ -679,33 +624,46 @@ class HTMLToMDConverter:
             href: The href attribute value from the HTML link
 
         Returns:
-            Resolved full URL if possible, otherwise original href
+            Resolved full URL if possible, otherwise original href with proper encoding
         """
         if not self.url_mapper or not href:
-            return href
+            return self._encode_url_path(href) if href else href
 
         # Clean href - remove fragments and whitespace
         clean_href = href.strip().split("#")[0]
 
-        # If href is already absolute, return as is
+        # If href is already absolute, encode and return
         if clean_href.startswith(("http://", "https://")):
-            return clean_href
+            # For absolute URLs, we need to be more careful about encoding
+            # Split into base and path components
+            if "://" in clean_href:
+                protocol_and_domain, path = clean_href.split("://", 1)
+                if "/" in path:
+                    domain, url_path = path.split("/", 1)
+                    encoded_path = self._encode_url_path("/" + url_path)
+                    return f"{protocol_and_domain}://{domain}{encoded_path}"
+                else:
+                    return clean_href
+            return self._encode_url_path(clean_href)
 
         # If we have a base_url, construct the full URL
         if self.url_mapper.base_url:
             if clean_href.startswith("/"):
                 # Root-relative URL: href="/root/path.htm"
-                return f"{self.url_mapper.base_url}{clean_href}"
+                encoded_path = self._encode_url_path(clean_href)
+                return f"{self.url_mapper.base_url}{encoded_path}"
             elif clean_href.startswith("../"):
                 # Parent directory relative: href="../Plan Setup Reference/PlanSetup/Benefit Plans.htm"
                 # Get current page URL to determine current directory
                 current_url = self._get_current_page_url()
                 if current_url:
                     resolved_url = self._resolve_relative_path(current_url, clean_href)
-                    return f"{self.url_mapper.base_url}{resolved_url}"
+                    encoded_path = self._encode_url_path(resolved_url)
+                    return f"{self.url_mapper.base_url}{encoded_path}"
                 else:
                     # Fallback: treat as relative to base
-                    return f"{self.url_mapper.base_url}/{clean_href}"
+                    encoded_path = self._encode_url_path("/" + clean_href)
+                    return f"{self.url_mapper.base_url}{encoded_path}"
             else:
                 # Same directory relative: href="Annual Enrollment Timeline.htm"
                 # Get current page URL to determine current directory
@@ -714,15 +672,19 @@ class HTMLToMDConverter:
                     # Extract directory from current URL
                     current_dir = "/".join(current_url.split("/")[:-1])
                     if current_dir:
-                        return f"{self.url_mapper.base_url}{current_dir}/{clean_href}"
+                        full_path = f"{current_dir}/{clean_href}"
+                        encoded_path = self._encode_url_path(full_path)
+                        return f"{self.url_mapper.base_url}{encoded_path}"
                     else:
-                        return f"{self.url_mapper.base_url}/{clean_href}"
+                        encoded_path = self._encode_url_path("/" + clean_href)
+                        return f"{self.url_mapper.base_url}{encoded_path}"
                 else:
                     # Fallback: treat as relative to base
-                    return f"{self.url_mapper.base_url}/{clean_href}"
+                    encoded_path = self._encode_url_path("/" + clean_href)
+                    return f"{self.url_mapper.base_url}{encoded_path}"
 
-        # Fallback: return original href
-        return href
+        # Fallback: return encoded original href
+        return self._encode_url_path(href)
 
     def _get_current_page_url(self) -> str:
         """Get the current page URL from the URL mapper."""
@@ -792,3 +754,52 @@ class HTMLToMDConverter:
         # Remove special characters that might interfere with markdown
         text = text.replace("\u00a0", " ")  # Non-breaking space
         return text.strip()
+
+    def _get_current_page_filename(self) -> Optional[str]:
+        """Get the filename for the current page for image mapping."""
+        if not self.current_url:
+            return None
+
+        # Extract filename from current_url (remove path if present)
+        if "/" in self.current_url:
+            filename = self.current_url.split("/")[-1]
+        else:
+            filename = self.current_url
+
+        # Ensure filename has .html extension for image mapper compatibility
+        if not filename.endswith(".html"):
+            filename = filename + ".html"
+
+        return filename
+
+    def _encode_image_url(self, url: str) -> str:
+        """
+        Encode image URL to handle spaces and special characters properly.
+
+        Args:
+            url: Image URL that may contain unencoded spaces and special characters
+
+        Returns:
+            Properly encoded URL with spaces converted to %20
+        """
+        if not url:
+            return url
+
+        # If URL is already properly encoded, return as-is
+        if "%20" in url or "%2F" in url:
+            return url
+
+        # Parse the URL to handle encoding properly
+        if "://" in url:
+            # Split into protocol+domain and path
+            protocol_and_domain, path = url.split("://", 1)
+            if "/" in path:
+                domain, url_path = path.split("/", 1)
+                # Encode the path part only
+                encoded_path = self._encode_url_path("/" + url_path)
+                return f"{protocol_and_domain}://{domain}{encoded_path}"
+            else:
+                return url
+        else:
+            # Relative URL, encode the entire path
+            return self._encode_url_path(url)

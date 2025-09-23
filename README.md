@@ -110,9 +110,14 @@ python -m crawler.main
 # Convert HTML to RAG JSON (can be run multiple times)
 python -m crawler.process_rag
 
+For Debug :
+use launch.json config (Python:Module(crawler.process_rag))
+put break point on crawler\md_pipeline\md_pipeline_main.py/process_single_file()
+
 # With custom parameters
 python -m crawler.process_rag --batch-size 20 --skip-existing
 ```
+
 
 **Benefits of Two-Step Approach:**
 - **Efficiency**: No need to re-crawl when tweaking RAG processing

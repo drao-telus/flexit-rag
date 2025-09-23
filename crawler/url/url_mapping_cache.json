@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2025-09-23T02:09:31.208282",
+    "generated_at": "2025-09-23T23:13:40.424375",
     "source_file": "crawler/url/page_url.py",
     "total_mappings": 479,
     "description": "Bidirectional mapping between page URLs and filtered content filenames"

@@ -277,12 +277,17 @@ def generate_complete_image_report():
 """
 
     # Generate sections for each document
-    for doc_index, (document_url, images) in enumerate(document_images.items(), 1):
+    for doc_index, (document_url, document_data) in enumerate(
+        document_images.items(), 1
+    ):
+        filename = document_data.get("filename", document_url)
+        images = document_data.get("images", [])
+
         html_content += f"""
         <div class="document-section">
             <h2 class="document-header">
                 <a href="{document_url}" target="_blank">
-                    {document_url}
+                    {filename}
                 </a>
             </h2>
             <div class="images-container">
@@ -334,7 +339,7 @@ def generate_complete_image_report():
 
     # Write the complete report
     output_path = os.path.join(
-        "crawler", "debug", "image_enhancer_server" "image_report.html"
+        "crawler", "debug", "image_enhancer_server", "image_report.html"
     )
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)

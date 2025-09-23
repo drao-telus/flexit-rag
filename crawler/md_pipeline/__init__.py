@@ -21,11 +21,7 @@ from .md_rag_processor import (
     RAGChunk,
     get_file_processing_stats,
 )
-from .image_extractor_utility import (
-    ImageExtractorUtility,
-    extract_and_verify_images,
-    create_image_deployment_package,
-)
+
 from .md_pipeline_main import MDPipelineOrchestrator, PipelineConfig, PipelineStats
 
 __all__ = [
@@ -42,10 +38,6 @@ __all__ = [
     "RAGDocument",
     "RAGChunk",
     "get_file_processing_stats",
-    # Image handling
-    "ImageExtractorUtility",
-    "extract_and_verify_images",
-    "create_image_deployment_package",
     # Pipeline orchestration
     "MDPipelineOrchestrator",
     "PipelineConfig",

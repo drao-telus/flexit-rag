@@ -14,6 +14,7 @@ from flexit_llm.utility.topic_extractor import TopicExtractor
 
 from crawler.md_pipeline.md_chunking_strategy import ChunkingStrategyManager
 from crawler.url.url_mapper import URLMapper
+from crawler.url.image_mapper import ImageMapper
 
 
 @dataclass
@@ -65,11 +66,13 @@ class MDRAGProcessor:
     def __init__(
         self,
         enable_url_mapping: bool = True,
+        enable_image_mapping: bool = True,
         base_url: str = "",
     ):
         self.chunking_manager = ChunkingStrategyManager()
         self.topic_extractor = TopicExtractor()
         self.url_mapper = None
+        self.image_mapper = None
 
         # Initialize URL mapper if enabled
         if enable_url_mapping:
@@ -93,12 +96,31 @@ class MDRAGProcessor:
                 print(f"Warning: Could not initialize URL mapper: {e}")
                 self.url_mapper = None
 
+        # Initialize Image mapper if enabled
+        if enable_image_mapping:
+            try:
+                self.image_mapper = ImageMapper(
+                    "crawler/url/image_mapping_cache.json", base_url=base_url
+                )
+                # Build mapping cache to ensure fresh mappings
+                result = self.image_mapper.build_mapping_cache()
+                if result["success"]:
+                    print(
+                        f"Image mapping cache built: {result['total_images']} images mapped"
+                    )
+                else:
+                    print(
+                        f"Warning: Failed to build image mapping cache: {result.get('error', 'Unknown error')}"
+                    )
+            except Exception as e:
+                print(f"Warning: Could not initialize image mapper: {e}")
+                self.image_mapper = None
+
     def process_markdown_to_rag(
         self,
         markdown_content: str,
         source_file: str,
         metadata: Optional[Dict[str, Any]] = None,
-        images_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> RAGDocument:
         """
         Process markdown content into a RAG document.
@@ -133,10 +155,10 @@ class MDRAGProcessor:
             markdown_content, markdown_content, metadata
         )
 
-        # Use provided images metadata or empty list
-        images = images_metadata if images_metadata else []
+        # Resolve image information using image mapper
+        images = self._resolve_image_info(source_file)
 
-        # Generate document ID using original markdown content (already clean)
+        # Generate document ID
         document_id = self._generate_document_id(source_file, markdown_content)
 
         # Add topic information to metadata
@@ -267,32 +289,6 @@ class MDRAGProcessor:
             if breadcrumbs_list and isinstance(breadcrumbs_list, list):
                 breadcrumb = " > ".join(breadcrumbs_list)
 
-        # Get topics specifically for this chunk's content
-        # chunk_topics = self.topic_extractor.get_chunk_topics(original_content, breadcrumb)
-        # chunk_metadata['topics'] = chunk_topics
-
-        # Add chunking strategy metadata
-        # chunk_metadata.update({
-        #     "section_title": chunk_dict.get("section_title", ""),
-        #     "section_level": chunk_dict.get("section_level"),
-        #     "overlap_info": chunk_dict.get("overlap_info", {"has_overlap": False}),
-        #     "table_info": chunk_dict.get("table_info"),
-        #     "chunking_strategy": chunk_dict.get("chunking_strategy", strategy_name)
-        # })
-
-        # Add content processing metadata
-        # chunk_metadata.update({
-        #     "content_processing": {
-        #         "has_cleaned_version": bool(cleaned_content and cleaned_content != original_content),
-        #         "cleaning_applied": ["whitespace_normalization", "line_break_optimization"] if cleaned_content != original_content else [],
-        #         "optimized_for": "text-embedding-3-large"
-        #     }
-        # })
-
-        # Add content analysis metadata based on cleaned content
-        # content_metadata = self._extract_chunk_metadata(cleaned_content)
-        # chunk_metadata.update(content_metadata)
-
         return RAGChunk(
             chunk_id=chunk_id,
             content=original_content.strip(),  # Original markdown content
@@ -385,6 +381,33 @@ class MDRAGProcessor:
         except Exception as e:
             print(f"Warning: Could not resolve page URL for {source_file}: {e}")
             return ""
+
+    def _resolve_image_info(self, source_file: str) -> List[Dict[str, str]]:
+        """
+        Resolve image information from the source file using image mapper.
+
+        Args:
+            source_file: Path to the source HTML file
+
+        Returns:
+            List of image dictionaries with metadata, or empty list if not found
+        """
+        if not self.image_mapper:
+            return []
+
+        try:
+            # Extract filename from source file path (without extension)
+            source_path = Path(source_file)
+            filename = source_path.stem
+
+            # Get images for this filename from the image mapper
+            images = self.image_mapper.get_images_for_filename(filename)
+
+            return images
+
+        except Exception as e:
+            print(f"Warning: Could not resolve image info for {source_file}: {e}")
+            return []
 
     def save_rag_document(self, rag_document: RAGDocument, output_path: str) -> None:
         """Save RAG document to JSON file."""
@@ -496,5 +519,4 @@ def get_file_processing_stats(rag_document: RAGDocument) -> Dict[str, Any]:
             else 0
         ),
         "has_images": len(rag_document.images) > 0,
-        "image_count": len(rag_document.images),
     }
