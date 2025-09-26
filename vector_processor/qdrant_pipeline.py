@@ -171,7 +171,7 @@ class QdrantPipeline:
                     "document_id": chunk_data["document_id"],
                     "title": chunk_data["title"],
                     "breadcrumb": chunk_data["breadcrumb"],
-                    "source_file": chunk_data["source_file"],
+                    "page_url": chunk_data["page_url"],
                 }
 
         logger.info(
@@ -205,7 +205,7 @@ class QdrantPipeline:
                         "document_id": chunk_info["document_id"],
                         "title": chunk_info["title"],
                         "breadcrumb": chunk_info["breadcrumb"],
-                        "source_file": chunk_info["source_file"],
+                        "page_url": chunk_info["page_url"],
                     }
 
                     self.processed_chunks.append(processed_chunk)
@@ -261,7 +261,7 @@ class QdrantPipeline:
                     "document_id": chunk_data.get("document_id"),
                     "title": chunk_data.get("title"),
                     "breadcrumb": chunk_data.get("breadcrumb"),
-                    "source_file": chunk_data.get("source_file"),
+                    "page_url": chunk_data.get("page_url"),
                     "user_id": self.user_id,
                     "stored_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 }

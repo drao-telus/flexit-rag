@@ -55,20 +55,6 @@ class DocumentLoader:
         Returns:
             Tuple of (documents_loaded, chunks_loaded)
         """
-        cache_file = Path("flexit_llm/utility/indexes_cache.json")
-
-        # Check if cache already exists
-        if cache_file.exists():
-            logger.info(
-                "Cache file already exists. Use CacheDataLoader for retrieval operations."
-            )
-            # Load basic stats from cache for return value
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    cache_data = json.load(f)
-                return cache_data["total_documents"], cache_data["total_chunks"]
-            except Exception as e:
-                logger.warning(f"Failed to read cache stats: {e}")
 
         # Perform full indexing and cache generation
         if not self.rag_output_dir.exists():
@@ -133,12 +119,7 @@ class DocumentLoader:
                     chunk_id=chunk_data["chunk_id"],
                     document_id=data["document_id"],
                     content=chunk_data["content"],
-                    # chunk_type=chunk_data['chunk_type'],
-                    # chunk_index=chunk_data['chunk_index'],
-                    # total_chunks=chunk_data['total_chunks'],
-                    # topics=chunk_data['metadata'].get('topics', {}),
-                    # metadata=chunk_data['metadata'],
-                    source_file=data["source_file"],
+                    page_url=data["page_url"],
                     title=data["title"],
                     breadcrumb=data["breadcrumb"],
                 )

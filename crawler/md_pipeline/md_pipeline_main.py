@@ -10,7 +10,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from .html_to_md_converter import HTMLToMDConverter
-from .md_rag_processor import MDRAGProcessor, RAGDocument, get_file_processing_stats
+from .md_rag_processor import MDRAGProcessor, get_file_processing_stats
 
 
 @dataclass

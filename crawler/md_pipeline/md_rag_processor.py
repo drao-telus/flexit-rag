@@ -15,6 +15,8 @@ from flexit_llm.utility.topic_extractor import TopicExtractor
 from crawler.md_pipeline.md_chunking_strategy import ChunkingStrategyManager
 from crawler.url.url_mapper import URLMapper
 from crawler.url.image_mapper import ImageMapper
+from crawler.url.url_encoder import encode_url_path
+from crawler.download_images import run_cache_update_only
 
 
 @dataclass
@@ -112,6 +114,8 @@ class MDRAGProcessor:
                     print(
                         f"Warning: Failed to build image mapping cache: {result.get('error', 'Unknown error')}"
                     )
+                run_cache_update_only()
+                self.image_mapper.reload_existing_cache()
             except Exception as e:
                 print(f"Warning: Could not initialize image mapper: {e}")
                 self.image_mapper = None
@@ -179,7 +183,7 @@ class MDRAGProcessor:
             rag_chunks.append(rag_chunk)
 
         # Resolve page URL using URL mapper
-        page_url = self._resolve_page_url(source_file)
+        page_url = encode_url_path(self._resolve_page_url(source_file))
 
         # Create RAG document
         rag_document = RAGDocument(
@@ -269,7 +273,6 @@ class MDRAGProcessor:
         # Extract both original and cleaned content from chunk dictionary
         original_content = chunk_dict.get("md_content", "")
         cleaned_content = chunk_dict.get("text", original_content)
-        chunk_type = chunk_dict.get("chunk_type", "section")
 
         # Generate chunk ID based on cleaned content (for consistency)
         chunk_id = self._generate_chunk_id(cleaned_content, chunk_index)

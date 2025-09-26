@@ -540,21 +540,21 @@ class HTMLToMDConverter:
                 return ""
 
             # Extract image information
-            enhance_url = matching_image.get("enhance_url", "")
+            public_enhance_url = matching_image.get("public_enhance_url", "")
             description = matching_image.get("description", "")
 
-            if not enhance_url:
-                self.logger.warning(f"No enhance_url found for image: {img_src}")
+            if not public_enhance_url:
+                self.logger.warning(f"No public_enhance_url found for image: {img_src}")
                 return ""
 
-            # Ensure enhance_url is properly encoded
-            encoded_enhance_url = self._encode_image_url(enhance_url)
+            # # Ensure enhance_url is properly encoded
+            # encoded_enhance_url = self._encode_image_url(enhance_url)
 
             # Generate Markdown image syntax: ![description](encoded_enhance_url)
             if description:
-                return f"![{description}]({encoded_enhance_url})"
+                return f"![{description}]({public_enhance_url})"
             else:
-                return f"![]({encoded_enhance_url})"
+                return f"![]({public_enhance_url})"
 
         except Exception as e:
             self.logger.error(f"Error converting image to markdown: {e}")

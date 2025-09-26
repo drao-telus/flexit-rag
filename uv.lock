@@ -266,6 +266,7 @@ dependencies = [
     { name = "ruff" },
     { name = "scikit-learn" },
     { name = "streamlit" },
+    { name = "streamlit-cookies-controller" },
     { name = "textstat" },
     { name = "tiktoken" },
     { name = "unidecode" },
@@ -295,6 +296,7 @@ requires-dist = [
     { name = "ruff", specifier = ">=0.13.1" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "streamlit", specifier = ">=1.28.0" },
+    { name = "streamlit-cookies-controller", specifier = ">=0.0.4" },
     { name = "textstat", specifier = ">=0.7.10" },
     { name = "tiktoken", specifier = ">=0.11.0" },
     { name = "unidecode", specifier = ">=1.4.0" },
@@ -1580,6 +1582,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6a/06/cab0f4dcc7c092489b0ec0600fedbc3ffb219d6f1ab0d1878451a39c3da1/streamlit-1.49.0.tar.gz", hash = "sha256:22b48f9065435816405129c03e365725cc73759ed17c0efa929d40b4531f8bb0", size = 9640747, upload-time = "2025-08-26T19:40:48.33Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/9d/fe78a94ca379aa80e0e14900ce0e6276d339710a11039ad8700dc66a8014/streamlit-1.49.0-py3-none-any.whl", hash = "sha256:4defc9bcdaa6ee214ce25c1a8f660bcc410293a9e78a82251938793c8694a5ee", size = 10044260, upload-time = "2025-08-26T19:40:45.533Z" },
+]
+
+[[package]]
+name = "streamlit-cookies-controller"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/c8/7caf505d62faeb8c0f6e6b74b554e1c2b0c3ca46c0a39250445c574a5a18/streamlit-cookies-controller-0.0.4.tar.gz", hash = "sha256:f5df2543de858f1585dcb6e90f58f38aafbf313ee8e237c64663b2d9761583cc", size = 406305, upload-time = "2024-04-10T03:50:35.813Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/02/c6/3bbdfecf5009943bcb62d37e3fd4b3fe45e87137e449a50e3025170bc9f7/streamlit_cookies_controller-0.0.4-py3-none-any.whl", hash = "sha256:f97fec6acdeee9cb9e16da25c3fc91d404b5b0ddced87c1d9fa9c62f65ca3251", size = 409303, upload-time = "2024-04-10T03:50:33.458Z" },
 ]
 
 [[package]]

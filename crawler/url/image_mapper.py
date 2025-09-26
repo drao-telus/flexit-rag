@@ -73,6 +73,10 @@ class ImageMapper:
         # Try to load existing cache
         self._load_image_cache()
 
+    def reload_existing_cache(self) -> bool:
+        """Load existing image mapping cache from file."""
+        return self._load_image_cache()
+
     def get_images_for_filename(self, filename: str) -> List[Dict[str, str]]:
         """
         Get all images associated with a filename.
@@ -124,7 +128,7 @@ class ImageMapper:
             output = self.process_all_files()
 
             # Extract results from output
-            metadata = output.get("metadata", {})
+            # metadata = output.get("metadata", {})
             document_images = output.get("document_images", {})
 
             # Build filename-based mapping from processed data
@@ -269,18 +273,12 @@ class ImageMapper:
 
             # Check if it's the optimized format (schema version 3.0)
             metadata = cache_data.get("metadata", {})
-            if metadata.get("schema_version") == "3.0":
-                # Load optimized format
-                self.filename_to_images_map = cache_data.get("filename_to_images", {})
-                self.cache_metadata = metadata
-                logger.info(
-                    f"Loaded optimized image cache: {len(self.filename_to_images_map)} files with images"
-                )
-                return True
-            else:
-                # Need to build optimized cache from original format
-                logger.info("Found original format cache, will build optimized version")
-                return False
+            self.filename_to_images_map = cache_data.get("filename_to_images", {})
+            self.cache_metadata = metadata
+            logger.info(
+                f"Loaded optimized image cache: {len(self.filename_to_images_map)} files with images"
+            )
+            return True
 
         except Exception as e:
             logger.error(f"Error loading image cache: {e}")
