@@ -62,6 +62,30 @@ flexit-rag/
 
 ## Complete Workflow Options
 
+### Key Commands:
+```bash
+# Download and clean HTML pages
+python -m crawler.main
+
+# Execute with custom parameters
+python -m crawler.process_rag --batch-size 100
+
+# Create embeddings (run from /main.py)
+results = pipeline.run_complete_pipeline(
+    recreate_collection=True,  # Create a new collection
+    embedding_batch_size=50,  # Process 50 chunks at a time
+    storage_batch_size=100,  # Store 100 vectors in each batch
+)
+
+# Debugging
+
+1.  /main.py ( with "name": "Python:Module(Main)")
+
+2. Python:Module(crawler.process_rag) debug python -m crawler.process_rag
+
+3. flexit_llm\main.py ( "name": "Streamlit Python debug",)
+
+
 ### Option 1: Integrated Workflow (Recommended)
 
 **Best for**: Production use, simple deployment, automatic processing
@@ -117,6 +141,7 @@ put break point on crawler\md_pipeline\md_pipeline_main.py/process_single_file()
 # With custom parameters
 python -m crawler.process_rag --batch-size 20 --skip-existing
 ```
+
 
 
 **Benefits of Two-Step Approach:**

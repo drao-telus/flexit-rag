@@ -23,4 +23,5 @@ __pycache__/main.cpython-312.pyc
 crawler/download_images/images/
 crawler/download_images/backups/
 crawler/download_images/download_log.txt
-crawler/download_images/\.git-disabled/
+crawler/download_images/.git_disabled/
+crawler/download_images/.git_disabled/*
